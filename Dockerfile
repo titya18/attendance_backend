@@ -1,22 +1,32 @@
-# Step 1: Build the app
-FROM node:18 AS builder
+FROM node:20-bullseye AS builder
 
 WORKDIR /app
 
-# Copy package.json and package-lock.json first for better caching
 COPY package*.json ./
-
-# Install dependencies (including dotenv)
 RUN npm install
 
-# Copy the rest of the source code
+COPY prisma ./prisma
+RUN chmod +x ./node_modules/.bin/prisma && npx prisma generate
+
 COPY . .
+RUN chmod +x ./node_modules/.bin/tsc \
+ && chmod +x ./node_modules/typescript/bin/tsc \
+ && npm run build
 
-# Generate Prisma client
-Run npx prisma generate
+FROM node:20-bullseye
 
-# Build the TypeScript files
-RUN npm run build
+WORKDIR /app
 
-# Start the server
-CMD ["node", "dist/src/server.js"]
+ENV NODE_ENV=production
+
+COPY package*.json ./
+RUN npm install --omit=dev
+
+COPY prisma ./prisma
+RUN chmod +x ./node_modules/.bin/prisma && npx prisma generate
+
+COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/public ./public
+
+
+CMD ["node", "dist/server.js"]
